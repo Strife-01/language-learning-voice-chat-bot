@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from google import genai
+from google.genai import types
 from google.cloud import texttospeech, speech
 
 app = Flask(__name__)
@@ -119,9 +120,13 @@ def chat_audio():
              prompt = f"{base_role} Reply naturally in Dutch to: '{user_text}'"
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp", 
+            model="gemini-3-flash-preview",
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="minimal")
+            ),
             contents=prompt
         )
+
         ai_reply = response.text
 
         ai_audio = get_audio_output(ai_reply)
