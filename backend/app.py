@@ -180,7 +180,7 @@ def chat_audio():
         }
 
         current_role = roles.get(context, roles["tutor"])
-        current_role_fallback = "\n- ".join([f'"{phrase}"' for phrase in current_role["fallback"]])
+        current_role_fallback = "\n".join([f'"{phrase}"' for phrase in current_role["fallback"]])
 
         history_str = "\n".join(g_history) if g_history else "No previous conversation."
 
@@ -191,14 +191,14 @@ def chat_audio():
             "1. Do NOT use markdown (bold, italics, headers).\n"
             "2. Do NOT use lists or complex symbols.\n"
             "3. Use only plain text and newlines.\n"
-            "4. IF THE USER IS OFF-TOPIC/UNCLEAR: You must steer them back using one of these phrases:\n"
-            f"- {current_role_fallback}"
+            "4. IF THE USER IS OFF-TOPIC: You must steer them back on topic. For example, the following phrases may be used:\n"
+            f"{current_role_fallback}"
         )
 
         if live_feedback:
             prompt = (
                 f"{system_behavior}\n\n"
-                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"CONVERSATION HISTORY\n{history_str}\n\n"
                 f"NEW USER INPUT: '{user_text}'\n\n"
                 "TASK:\n"
                 "1. Analyze input for grammatical errors.\n"
@@ -210,7 +210,7 @@ def chat_audio():
         else:
             prompt = (
                 f"{system_behavior}\n\n"
-                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"CONVERSATION HISTORY\n{history_str}\n\n"
                 f"NEW USER INPUT: '{user_text}'\n\n"
                 "TASK:\n"
                 "1. Ignore grammatical errors to prioritize flow.\n"

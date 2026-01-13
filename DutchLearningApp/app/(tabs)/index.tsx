@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView,
-  SafeAreaView, ActivityIndicator, Platform, Alert, Image
+  SafeAreaView, ActivityIndicator, Platform, Alert, Image, RefreshControl,
+  Pressable
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
@@ -14,6 +15,7 @@ export default function HomeScreen() {
 
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
 
@@ -89,6 +91,7 @@ export default function HomeScreen() {
       if (reset.status != 204) {
         console.log("Could not reset history.");
       }
+      setMessages([]);
     } catch (e) {
       console.log(e)
     }
@@ -138,10 +141,13 @@ export default function HomeScreen() {
 
   const handleSuccess = (data: any) => {
     if (data.status === 'success') {
+      let newMessages = [];
+      newMessages.push({ sender: 'user', text: data.user_text });
+      if (liveFeedback) newMessages.push({ sender: 'feedback', text: data.feedback });
+      newMessages.push({ sender: 'ai', text: data.reply });
       setMessages(prev => [
         ...prev,
-        { sender: 'user', text: data.user_text },
-        { sender: 'ai', text: data.reply }
+        ...newMessages
       ]);
       if (data.audio) playAudio(data.audio);
     } else {
@@ -159,6 +165,12 @@ export default function HomeScreen() {
     } catch (e) { console.log("Play error", e); }
   };
 
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await resetHistory();
+    setRefreshing(false);
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
 
@@ -166,28 +178,51 @@ export default function HomeScreen() {
         <Text style={styles.headerTitle}>Dutch Voice Companion</Text>
 
         <View style={styles.contextContainer}>
+
           <Text style={styles.sectionLabel}>Context:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }}
+          >
             {['waiter', 'doctor', 'grocery'].map((c) => (
               <TouchableOpacity
                 key={c}
-                style={[styles.pill, context === c && styles.pillActive]}
-                onPress={() => setContext(c)}
+                style={[
+                  styles.pill,
+                  { marginRight: 5 },
+                  context === c && styles.pillActive
+                ]}
+                onPress={() => {
+                  setMessages([]);
+                  setContext(c);
+                }}
               >
                 <Text style={[styles.pillText, context === c && styles.pillTextActive]}>
                   {c.charAt(0).toUpperCase() + c.slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              key={'reset_history'}
-              style={[styles.pill, styles.pillActive]}
-              onPress={() => resetHistory()}>
-              <Text style={[styles.pillText, styles.pillTextActive]}>
-                "Reset Context"
-              </Text>
-            </TouchableOpacity>
           </ScrollView>
+          <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center' }}>
+            <Pressable
+              key="reset_history"
+              onPress={() => resetHistory()}
+              style={({ pressed }) => [
+                styles.pill,
+                { marginLeft: 10 },
+                pressed && styles.pillActive
+              ]}
+            >
+              {({ pressed }) => (
+                <Text style={[styles.pillText, pressed && styles.pillTextActive]}>
+                  Reset Context
+                </Text>
+              )}
+            </Pressable>
+
+          </View>
         </View>
 
         <View style={styles.toggleRow}>
@@ -200,15 +235,21 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.chatContainer} contentContainerStyle={{ paddingBottom: 20 }}>
+      <ScrollView
+        style={styles.chatContainer}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {messages.length === 0 && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>👋 Select a context and tap the mic to start speaking Dutch!</Text>
           </View>
         )}
         {messages.map((msg, index) => (
-          <View key={index} style={[styles.bubble, msg.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
-            <Text style={msg.sender === 'user' ? styles.userText : styles.aiText}>
+          <View key={index} style={[styles.bubble, msg.sender === 'user' ? styles.userBubble : msg.sender === 'feedback' ? styles.feedbackBubble : styles.aiBubble]}>
+            <Text style={msg.sender === 'user' ? styles.userText : msg.sender === 'feedback' ? styles.feedbackText : styles.aiText}>
               {msg.text}
             </Text>
           </View>
@@ -263,8 +304,10 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '80%', padding: 14, borderRadius: 18, marginBottom: 12 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#007AFF', borderBottomRightRadius: 4 },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: '#E5E5EA', borderBottomLeftRadius: 4 },
+  feedbackBubble: { alignSelf: 'flex-start', backgroundColor: '#535353', borderBottomLeftRadius: 4 },
   userText: { color: 'white', fontSize: 16, lineHeight: 22 },
   aiText: { color: '#000', fontSize: 16, lineHeight: 22 },
+  feedbackText: { color: '#ffffff', fontSize: 16, lineHeight: 22 },
 
   footer: { alignItems: 'center', paddingVertical: 20, backgroundColor: 'white', borderTopWidth: 1, borderColor: '#E5E5EA' },
   micButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', shadowColor: "#007AFF", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
