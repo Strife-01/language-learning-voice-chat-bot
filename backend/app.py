@@ -22,6 +22,9 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "google-key.json"
 tts_client = texttospeech.TextToSpeechClient()
 stt_client = speech.SpeechClient()
 
+g_history = []
+g_context = "tutor"
+
 def transcribe_audio(file_path):
     wav_path = "temp_input.wav"
     
@@ -79,6 +82,16 @@ def get_audio_output(text):
     response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
     return base64.b64encode(response.audio_content).decode('utf-8')
 
+@app.route('/reset_context', methods=['PUT'])
+def reset_context():
+    print('Resetting context')
+    global g_context
+    global g_history
+    g_context = "tutor"
+    g_history = []
+    print('Finished resetting context')
+    return "", 204
+
 @app.route('/chat-audio', methods=['POST'])
 def chat_audio():
     print("\n--- NEW REQUEST ---")
@@ -106,6 +119,12 @@ def chat_audio():
     try:
         context = request.form.get('context', 'tutor')
         live_feedback = request.form.get('liveFeedback') == 'true'
+
+        global g_context
+        global g_history
+        if g_context != context:
+            g_context = context
+            g_history = []
 
         roles = {
             "waiter": {
@@ -160,16 +179,17 @@ def chat_audio():
         }
 
         current_role = roles.get(context, roles["tutor"])
-        current_role_description = current_role["desc"]
         current_role_fallback = "\n- ".join([f'"{phrase}"' for phrase in current_role["fallback"]])
 
+        history_str = "\n".join(g_history) if g_history else "No previous conversation."
+
         system_behavior = (
-            f"{current_role_description}\n"
+            f"{current_role['desc']}\n"
             "CONTEXT: The user is a beginner level Dutch learner. Match their tone naturally.\n"
             "CRITICAL FORMATTING RULES (Optimized for Text-to-Speech):\n"
             "1. Do NOT use markdown (bold, italics, headers).\n"
             "2. Do NOT use lists or complex symbols.\n"
-            "3. Use only plain text and newlines."
+            "3. Use only plain text and newlines.\n"
             "4. IF THE USER IS OFF-TOPIC/UNCLEAR: You must steer them back using one of these phrases:\n"
             f"- {current_role_fallback}"
         )
@@ -177,7 +197,8 @@ def chat_audio():
         if live_feedback:
             prompt = (
                 f"{system_behavior}\n\n"
-                f"USER INPUT: '{user_text}'\n\n"
+                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"NEW USER INPUT: '{user_text}'\n\n"
                 "TASK:\n"
                 "1. Analyze input for grammatical errors.\n"
                 "2. [Feedback]: In English, briefly correct errors. If perfect, be encouraging.\n"
@@ -188,7 +209,8 @@ def chat_audio():
         else:
             prompt = (
                 f"{system_behavior}\n\n"
-                f"USER INPUT: '{user_text}'\n\n"
+                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"NEW USER INPUT: '{user_text}'\n\n"
                 "TASK:\n"
                 "1. Ignore grammatical errors to prioritize flow.\n"
                 "2. Respond naturally in Dutch.\n"
@@ -216,9 +238,24 @@ def chat_audio():
                 feedback_text = parts[0].replace('[Feedback]', '').strip()
                 # Part 1 is the Dutch Reply
                 reply_text = parts[1].strip()
+
+                # Append to history
+                g_history.append(f"User: {user_text}")
+                g_history.append(f"{context}: {reply_text}")
             else:
                 # Fallback if model missed the tag: treat whole thing as reply
                 reply_text = raw_text
+                # Append to history
+                g_history.append(f"User: {user_text}")
+                g_history.append(f"{context}: {raw_text}")
+        else:
+            # Append to history
+            g_history.append(f"User: {user_text}")
+            g_history.append(f"{context}: {raw_text}")
+
+        # Limit history to prevent token overflow (last 25 interactions)
+        if len(g_history) > 50:
+            g_history = g_history[-50:]
 
         ai_audio = get_audio_output(reply_text if reply_text else "Sorry, I am silent.")
 
