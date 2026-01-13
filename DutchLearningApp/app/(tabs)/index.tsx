@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, 
+import {
+  StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView,
   SafeAreaView, ActivityIndicator, Platform, Alert, Image
 } from 'react-native';
 import { Audio } from 'expo-av';
@@ -9,12 +9,12 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:40811';
 
 export default function HomeScreen() {
   const [context, setContext] = useState('waiter');
-  const [liveFeedback, setLiveFeedback] = useState(true); 
-  const [messages, setMessages] = useState<any[]>([]); 
-  
+  const [liveFeedback, setLiveFeedback] = useState(true);
+  const [messages, setMessages] = useState<any[]>([]);
+
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const recordingRef = useRef<Audio.Recording | null>(null);
 
   useEffect(() => {
@@ -45,10 +45,10 @@ export default function HomeScreen() {
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
-      
+
       recordingRef.current = recording;
       setIsRecording(true);
-      
+
     } catch (err) {
       console.error("Start Error:", err);
       Alert.alert("Error", "Could not start microphone.");
@@ -67,7 +67,7 @@ export default function HomeScreen() {
 
     try {
       await recording.stopAndUnloadAsync();
-      const uri = recording.getURI(); 
+      const uri = recording.getURI();
       recordingRef.current = null;
 
       if (uri) {
@@ -81,10 +81,23 @@ export default function HomeScreen() {
     }
   };
 
+  const resetHistory = async () => {
+    try {
+      const reset = await fetch(`${BASE_URL}/reset_context`, {
+        method: 'PUT',
+      });
+      if (reset.status != 204) {
+        console.log("Could not reset history.");
+      }
+    } catch (e) {
+      console.log(e)
+    }
+  }
+
   const uploadAudio = async (uri: string) => {
     try {
       const formData = new FormData();
-      
+
       if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const audioBlob = await response.blob();
@@ -98,7 +111,7 @@ export default function HomeScreen() {
         });
         const data = await upload.json();
         handleSuccess(data);
-      } 
+      }
       else {
         const result = await FileSystem.uploadAsync(`${BASE_URL}/chat-audio`, uri, {
           httpMethod: 'POST',
@@ -126,7 +139,7 @@ export default function HomeScreen() {
   const handleSuccess = (data: any) => {
     if (data.status === 'success') {
       setMessages(prev => [
-        ...prev, 
+        ...prev,
         { sender: 'user', text: data.user_text },
         { sender: 'ai', text: data.reply }
       ]);
@@ -148,17 +161,17 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Dutch Voice Companion</Text>
-        
+
         <View style={styles.contextContainer}>
           <Text style={styles.sectionLabel}>Context:</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
             {['waiter', 'doctor', 'grocery'].map((c) => (
-              <TouchableOpacity 
-                key={c} 
-                style={[styles.pill, context === c && styles.pillActive]} 
+              <TouchableOpacity
+                key={c}
+                style={[styles.pill, context === c && styles.pillActive]}
                 onPress={() => setContext(c)}
               >
                 <Text style={[styles.pillText, context === c && styles.pillTextActive]}>
@@ -166,14 +179,22 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity
+              key={'reset_history'}
+              style={[styles.pill, styles.pillActive]}
+              onPress={() => resetHistory()}>
+              <Text style={[styles.pillText, styles.pillTextActive]}>
+                "Reset Context"
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
 
         <View style={styles.toggleRow}>
           <Text style={styles.sectionLabel}>Live Corrections</Text>
-          <Switch 
-            value={liveFeedback} 
-            onValueChange={setLiveFeedback} 
+          <Switch
+            value={liveFeedback}
+            onValueChange={setLiveFeedback}
             trackColor={{ false: "#767577", true: "#34C759" }}
           />
         </View>
@@ -197,7 +218,7 @@ export default function HomeScreen() {
       <View style={styles.footer}>
         <TouchableOpacity
           style={[
-            styles.micButton, 
+            styles.micButton,
             isRecording && styles.micActive,
             isLoading && styles.micLoading
           ]}
@@ -205,9 +226,9 @@ export default function HomeScreen() {
           disabled={isLoading}
         >
           {isLoading ? (
-             <ActivityIndicator size="large" color="#FFF" />
+            <ActivityIndicator size="large" color="#FFF" />
           ) : (
-             <Text style={styles.micIcon}>{isRecording ? "⏹" : "🎤"}</Text>
+            <Text style={styles.micIcon}>{isRecording ? "⏹" : "🎤"}</Text>
           )}
         </TouchableOpacity>
         <Text style={styles.micLabel}>
@@ -221,10 +242,10 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7', paddingTop: Platform.OS === 'android' ? 30 : 0 },
-  
+
   header: { backgroundColor: 'white', padding: 20, paddingBottom: 15, borderBottomWidth: 1, borderColor: '#E5E5EA' },
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#000', textAlign: 'center', marginBottom: 20 },
-  
+
   contextContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   sectionLabel: { fontSize: 16, fontWeight: '600', color: '#333', marginRight: 10 },
   pillScroll: { flexGrow: 0 },
@@ -232,13 +253,13 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: '#007AFF' },
   pillText: { fontSize: 14, color: '#333', fontWeight: '500' },
   pillTextActive: { color: 'white', fontWeight: '700' },
-  
+
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
   chatContainer: { flex: 1, padding: 15 },
   emptyContainer: { marginTop: 60, alignItems: 'center', paddingHorizontal: 40 },
   emptyText: { textAlign: 'center', color: '#8E8E93', fontSize: 16, lineHeight: 24 },
-  
+
   bubble: { maxWidth: '80%', padding: 14, borderRadius: 18, marginBottom: 12 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#007AFF', borderBottomRightRadius: 4 },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: '#E5E5EA', borderBottomLeftRadius: 4 },
@@ -246,7 +267,7 @@ const styles = StyleSheet.create({
   aiText: { color: '#000', fontSize: 16, lineHeight: 22 },
 
   footer: { alignItems: 'center', paddingVertical: 20, backgroundColor: 'white', borderTopWidth: 1, borderColor: '#E5E5EA' },
-  micButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', shadowColor: "#007AFF", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  micButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', shadowColor: "#007AFF", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
   micActive: { backgroundColor: '#FF3B30', shadowColor: "#FF3B30" },
   micLoading: { backgroundColor: '#D1D1D6', shadowOpacity: 0 },
   micIcon: { fontSize: 32, color: 'white' },
