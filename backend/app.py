@@ -22,6 +22,9 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "google-key.json"
 tts_client = texttospeech.TextToSpeechClient()
 stt_client = speech.SpeechClient()
 
+g_history = []
+g_context = "tutor"
+
 def transcribe_audio(file_path):
     wav_path = "temp_input.wav"
     
@@ -79,6 +82,16 @@ def get_audio_output(text):
     response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
     return base64.b64encode(response.audio_content).decode('utf-8')
 
+@app.route('/reset_context', methods=['PUT'])
+def reset_context():
+    print('Resetting context')
+    global g_context
+    global g_history
+    g_context = "tutor"
+    g_history = []
+    print('Finished resetting context')
+    return "", 204
+
 @app.route('/chat-audio', methods=['POST'])
 def chat_audio():
     print("\n--- NEW REQUEST ---")
@@ -104,20 +117,105 @@ def chat_audio():
         return jsonify({"error": "No speech detected. Try speaking louder."}), 400
 
     try:
-        context = request.form.get('context', 'waiter')
+        context = request.form.get('context', 'tutor')
         live_feedback = request.form.get('liveFeedback') == 'true'
 
-        base_role = "You are a friendly Dutch tutor."
-        if context == "waiter": base_role = "You are a Dutch waiter."
-        elif context == "doctor": base_role = "You are a Dutch doctor."
-        elif context == "grocery": base_role = "You are a cashier."
+        global g_context
+        global g_history
+        if g_context != context:
+            g_context = context
+            g_history = []
+
+        roles = {
+            "waiter": {
+                "desc": (
+                    "You are a polite waiter at a Dutch café. The user is an international student ordering food/drinks. "
+                    "Keep your responses concise, helpful, and natural for a restaurant setting. "
+                    "Drive the conversation forward (e.g., asking about allergies, drinks, or the bill)."
+                ),
+                "fallback": [
+                    "Sorry, dat begreep ik niet helemaal. Wilt u misschien de menukaart zien?",
+                    "Het is erg druk in het café. Kan ik u alvast iets te drinken brengen?",
+                    "Sorry, ik ben aan het werk. Wilt u nog iets bestellen?",
+                    "Pardon? Ik hoorde u niet goed. Wilt u pinnen of contant betalen?"
+                ]
+            },
+            "doctor": {
+                "desc": (
+                    "You are a Dutch General Practitioner ('huisarts'). The user is an international student visiting as a patient. "
+                    "Be professional, empathetic, and clear. Ask relevant medical questions based on their complaints."
+                ),
+                "fallback": [
+                    "Laten we ons op uw gezondheid richten. Waar heeft u precies last van?",
+                    "Ik begrijp het, maar als huisarts wil ik graag weten hoe lang u deze klachten al heeft.",
+                    "Dat is niet mijn expertise. Laten we kijken naar uw medische situatie.",
+                    "Kunt u omschrijven waar de pijn precies zit?"
+                ]
+            },
+            "grocery": {
+                "desc": (
+                    "You are a cashier at a Dutch supermarket. The user is a customer checking out. "
+                    "Be efficient and friendly. Ask standard questions (e.g., 'Do you have a bonus card?', 'Receipt?')."
+                ),
+                "fallback": [
+                    "Sorry, er staat een rij. Heeft u een bonuskaart?",
+                    "Dat weet ik niet, ik zit achter de kassa. Wilt u het bonnetje mee?",
+                    "Anders gaat u even naar de servicebalie. Wilt u pinnen?",
+                    "Gaat het verder goed? Heeft u alles kunnen vinden?"
+                ]
+            },
+            "tutor": {
+                "desc": (
+                    "You are a friendly Dutch native speaker having a casual conversation with an international student. "
+                    "Your goal is to help them practice daily conversation."
+                ),
+                "fallback": [
+                    "Dat begreep ik niet helemaal. Kun je dat in het Nederlands proberen?",
+                    "Interessant! Maar laten we proberen een simpel gesprek te voeren. Hoe was je dag?",
+                    "Wat bedoel je precies? Kun je het anders zeggen?",
+                    "Zullen we oefenen met jezelf voorstellen?"
+                ]
+            }
+        }
+
+        current_role = roles.get(context, roles["tutor"])
+        current_role_fallback = "\n- ".join([f'"{phrase}"' for phrase in current_role["fallback"]])
+
+        history_str = "\n".join(g_history) if g_history else "No previous conversation."
+
+        system_behavior = (
+            f"{current_role['desc']}\n"
+            "CONTEXT: The user is a beginner level Dutch learner. Match their tone naturally.\n"
+            "CRITICAL FORMATTING RULES (Optimized for Text-to-Speech):\n"
+            "1. Do NOT use markdown (bold, italics, headers).\n"
+            "2. Do NOT use lists or complex symbols.\n"
+            "3. Use only plain text and newlines.\n"
+            "4. IF THE USER IS OFF-TOPIC/UNCLEAR: You must steer them back using one of these phrases:\n"
+            f"- {current_role_fallback}"
+        )
 
         if live_feedback:
-             prompt = (f"{base_role} The user is learning Dutch. They said: '{user_text}'. "
-                       f"1. In ENGLISH, briefly correct grammar errors. "
-                       f"2. Then reply in DUTCH. Format: [Feedback] [Reply]")
+            prompt = (
+                f"{system_behavior}\n\n"
+                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"NEW USER INPUT: '{user_text}'\n\n"
+                "TASK:\n"
+                "1. Analyze input for grammatical errors.\n"
+                "2. [Feedback]: In English, briefly correct errors. If perfect, be encouraging.\n"
+                "3. [Reply]: In Dutch, respond naturally to the content.\n"
+                "4. FORMAT: You must strictly follow this format:\n"
+                "[Feedback]\n(English correction here)\n\n[Reply]\n(Dutch response here)"
+            )
         else:
-             prompt = f"{base_role} Reply naturally in Dutch to: '{user_text}'"
+            prompt = (
+                f"{system_behavior}\n\n"
+                f"--- CONVERSATION HISTORY ---\n{history_str}\n----------------------------\n\n"
+                f"NEW USER INPUT: '{user_text}'\n\n"
+                "TASK:\n"
+                "1. Ignore grammatical errors to prioritize flow.\n"
+                "2. Respond naturally in Dutch.\n"
+                "3. Do not output any English."
+            )
 
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
@@ -127,15 +225,47 @@ def chat_audio():
             contents=prompt
         )
 
-        ai_reply = response.text
+        raw_text = response.text.strip()
+        feedback_text = None
+        reply_text = raw_text
 
-        ai_audio = get_audio_output(ai_reply)
+        if live_feedback:
+            # Regex to split on the [Reply] tag
+            parts = re.split(r'\[Reply\]', raw_text, flags=re.IGNORECASE)
+            
+            if len(parts) >= 2:
+                # Part 0 is Feedback
+                feedback_text = parts[0].replace('[Feedback]', '').strip()
+                # Part 1 is the Dutch Reply
+                reply_text = parts[1].strip()
+
+                # Append to history
+                g_history.append(f"User: {user_text}")
+                g_history.append(f"{context}: {reply_text}")
+            else:
+                # Fallback if model missed the tag: treat whole thing as reply
+                reply_text = raw_text
+                # Append to history
+                g_history.append(f"User: {user_text}")
+                g_history.append(f"{context}: {raw_text}")
+        else:
+            # Append to history
+            g_history.append(f"User: {user_text}")
+            g_history.append(f"{context}: {raw_text}")
+
+        # Limit history to prevent token overflow (last 25 interactions)
+        if len(g_history) > 50:
+            g_history = g_history[-50:]
+
+        ai_audio = get_audio_output(reply_text if reply_text else "Sorry, I am silent.")
 
         return jsonify({
+            "status": "success",
             "user_text": user_text,
-            "reply": ai_reply,
-            "audio": ai_audio,
-            "status": "success"
+            "raw_text": raw_text,
+            "feedback": feedback_text,
+            "reply": reply_text,
+            "audio": ai_audio
         })
 
     except Exception as e:
