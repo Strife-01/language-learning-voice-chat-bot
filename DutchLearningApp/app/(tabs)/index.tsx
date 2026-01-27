@@ -25,6 +25,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -151,8 +152,12 @@ export default function HomeScreen() {
   const handleSuccess = (data: any) => {
     if (data.status === 'success') {
       let newMessages = [];
-      newMessages.push({ sender: 'user', text: data.user_text });
-      if (liveFeedback) newMessages.push({ sender: 'feedback', text: data.feedback });
+      newMessages.push({
+        sender: 'user',
+        text: data.user_text,
+        feedback: liveFeedback && data.feedback ? data.feedback : null,
+        showFeedback: false
+      });
       newMessages.push({ sender: 'ai', text: data.reply });
       setMessages(prev => [
         ...prev,
@@ -162,6 +167,16 @@ export default function HomeScreen() {
     } else {
       Alert.alert("AI Error", "Could not understand audio.");
     }
+  };
+
+  const toggleFeedback = (index: number) => {
+    setMessages(prev => {
+      const updated = [...prev];
+      if (updated[index].sender === 'user') {
+        updated[index] = { ...updated[index], showFeedback: !updated[index].showFeedback };
+      }
+      return updated;
+    });
   };
 
   const playAudio = async (base64Audio: string) => {
@@ -253,11 +268,13 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.chatContainer}
         contentContainerStyle={{ paddingBottom: 20 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
       >
         {messages.length === 0 && (
           <View style={styles.emptyContainer}>
@@ -265,10 +282,31 @@ export default function HomeScreen() {
           </View>
         )}
         {messages.map((msg, index) => (
-          <View key={index} style={[styles.bubble, msg.sender === 'user' ? styles.userBubble : msg.sender === 'feedback' ? styles.feedbackBubble : styles.aiBubble]}>
-            <Text style={msg.sender === 'user' ? styles.userText : msg.sender === 'feedback' ? styles.feedbackText : styles.aiText}>
-              {msg.text}
-            </Text>
+          <View key={index} style={{ marginBottom: 12 }}>
+            <View style={[styles.bubble, msg.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
+              <Text style={msg.sender === 'user' ? styles.userText : styles.aiText}>
+                {msg.text}
+              </Text>
+            </View>
+
+            {msg.sender === 'user' && msg.feedback && (
+              <TouchableOpacity
+                onPress={() => toggleFeedback(index)}
+                style={{ alignSelf: 'flex-end', marginTop: 4, marginRight: 4, marginBottom: 4 }}
+              >
+                <Text style={{ color: '#8E8E93', fontSize: 13, fontWeight: '500' }}>
+                  {msg.showFeedback ? "Hide Correction" : "Show Correction"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {msg.sender === 'user' && msg.showFeedback && msg.feedback && (
+              <View style={[styles.bubble, styles.feedbackBubble]}>
+                <Text style={styles.feedbackText}>
+                  {msg.feedback}
+                </Text>
+              </View>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -322,7 +360,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '80%', padding: 14, borderRadius: 18, marginBottom: 12 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#007AFF', borderBottomRightRadius: 4 },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: '#E5E5EA', borderBottomLeftRadius: 4 },
-  feedbackBubble: { alignSelf: 'flex-start', backgroundColor: '#535353', borderBottomLeftRadius: 4 },
+  feedbackBubble: { alignSelf: 'flex-end', backgroundColor: '#535353', borderTopRightRadius: 4, marginTop: 12 },
   userText: { color: 'white', fontSize: 16, lineHeight: 22 },
   aiText: { color: '#000', fontSize: 16, lineHeight: 22 },
   feedbackText: { color: '#ffffff', fontSize: 16, lineHeight: 22 },
