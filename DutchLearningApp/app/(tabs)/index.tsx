@@ -5,13 +5,20 @@ import {
   Pressable
 } from 'react-native';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:40811';
 
 export default function HomeScreen() {
+  const user_ai_roles: Record<string, string[]> = {
+    waiter: ['international student ordering food/drinks', 'polite waiter at a Dutch café'],
+    doctor: ['international student visiting as a patient', 'Dutch General Practitioner (\'huisarts\')'],
+    grocery: ['customer checking out at the counter', 'cashier at a Dutch supermarket']
+  }
   const [context, setContext] = useState('waiter');
+  const [userAiPairDescription, setUserAiPairDescription] = useState(user_ai_roles.waiter);
   const [liveFeedback, setLiveFeedback] = useState(true);
   const [messages, setMessages] = useState<any[]>([]);
+  const [displayRoles, setDisplayRoles] = useState(true);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -84,6 +91,7 @@ export default function HomeScreen() {
   };
 
   const resetHistory = async () => {
+    setDisplayRoles(false);
     try {
       const reset = await fetch(`${BASE_URL}/reset_context`, {
         method: 'PUT',
@@ -92,6 +100,7 @@ export default function HomeScreen() {
         console.log("Could not reset history.");
       }
       setMessages([]);
+      setDisplayRoles(true);
     } catch (e) {
       console.log(e)
     }
@@ -195,8 +204,10 @@ export default function HomeScreen() {
                   context === c && styles.pillActive
                 ]}
                 onPress={() => {
+                  setUserAiPairDescription(user_ai_roles[c]);
                   setMessages([]);
                   setContext(c);
+                  setDisplayRoles(true);
                 }}
               >
                 <Text style={[styles.pillText, context === c && styles.pillTextActive]}>
@@ -205,6 +216,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
           <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center' }}>
             <Pressable
               key="reset_history"
@@ -224,6 +236,11 @@ export default function HomeScreen() {
 
           </View>
         </View>
+
+        {displayRoles && <View style={styles.rolesContainer}>
+          <Text style={styles.sectionLabel}>User Role: {userAiPairDescription[0]}</Text>
+          <Text style={styles.sectionLabel}>AI Role: {userAiPairDescription[1]}</Text>
+        </View>}
 
         <View style={styles.toggleRow}>
           <Text style={styles.sectionLabel}>Live Corrections</Text>
@@ -288,6 +305,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#000', textAlign: 'center', marginBottom: 20 },
 
   contextContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  rolesContainer: { marginTop: 5, marginBottom: 20, marginLeft: 15, backgroundColor: '#fff', borderRadius: 8 },
   sectionLabel: { fontSize: 16, fontWeight: '600', color: '#333', marginRight: 10 },
   pillScroll: { flexGrow: 0 },
   pill: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#F2F2F7', marginRight: 10 },
