@@ -155,7 +155,7 @@ def chat_audio():
             },
             "grocery": {
                 "desc": (
-                    "You are a cashier at a Dutch supermarket. The user is a customer checking out. "
+                    "You are a cashier at a Dutch supermarket. The user is a customer checking out at the counter. "
                     "Be efficient and friendly. Ask standard questions (e.g., 'Do you have a bonus card?', 'Receipt?')."
                 ),
                 "fallback": [
@@ -201,8 +201,8 @@ def chat_audio():
                 f"CONVERSATION HISTORY\n{history_str}\n\n"
                 f"NEW USER INPUT: '{user_text}'\n\n"
                 "TASK:\n"
-                "1. Analyze input for grammatical errors.\n"
-                "2. [Feedback]: In English, briefly correct errors. If perfect, be encouraging.\n"
+                "1. Analyze input for grammatical errors. If the errors can be caused by microphone noise or input errors, interpret it as likely intended based on the context (e.g. \"acht\" instead of \"nacht\"). If the user input is in English, provide the Dutch translation.\n"
+                "2. [Feedback]: In English, briefly and concisely correct errors without fluffing. If perfect, keep this empty.\n"
                 "3. [Reply]: In Dutch, respond naturally to the content.\n"
                 "4. FORMAT: You must strictly follow this format:\n"
                 "[Feedback]\n(English correction here)\n\n[Reply]\n(Dutch response here)"
